@@ -101,8 +101,8 @@ void * DoWork (void * threadid)
 		int rn = rand() % filesize;
 		long address = EIGHT_KB * (rn / EIGHT_KB);
 		char * record = CreateRecord(id, address);
-		pthread_mutex_lock(&worker_mutex);
 		WriteRecord(file, address, record);
+		pthread_mutex_lock(&worker_mutex);
 		cout << "Thread ID:\t" << id  << "\tAddress:\t" << address << "  \tID:\t" << id << endl;
 		pthread_mutex_unlock(&worker_mutex);
 	}
