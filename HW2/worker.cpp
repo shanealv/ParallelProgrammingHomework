@@ -72,7 +72,7 @@ int main (int argc, char * argv[])
 	
 	for (long i = 1; i <= num_workers; i++)
 	{
-		int returnCode = pthread_create(workers + i, NULL, DoWork, (void *) i);
+		int returnCode = pthread_create(workers + (i-1), NULL, DoWork, (void *) i);
 		if (returnCode)
 		{
 			cerr << "Error: unable to create thread, return code: " << returnCode << endl;
@@ -90,6 +90,7 @@ int main (int argc, char * argv[])
 			return 1;
 		}
 	}
+	
 	pthread_mutex_destroy(&record_id_mutex);
 }
 
@@ -101,8 +102,8 @@ void * DoWork (void * threadid)
 		int rn = rand() % filesize;
 		long address = EIGHT_KB * (rn / EIGHT_KB);
 		char * record = CreateRecord(id, address);
-		WriteRecord(file, address, record);
 		pthread_mutex_lock(&worker_mutex);
+		WriteRecord(file, address, record);
 		cout << "Thread ID:\t" << id  << "\tAddress:\t" << address << "  \tID:\t" << id << endl;
 		pthread_mutex_unlock(&worker_mutex);
 	}
@@ -162,6 +163,7 @@ char * CreateRecord (long tid, long address)
 	}
 	
 	memcpy(record + 3 * sizeof(long), &checksum, sizeof(long));
+
 	return record;
 }
 

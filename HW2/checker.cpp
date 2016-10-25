@@ -14,7 +14,7 @@ using namespace std;
 
 bool IsFileValid (const char fileName[]);
 long GetFileSize(const char filename[]);
-void ReadRecord(const char filename[], int address, char buffer[]);
+int ReadRecords(char filename[], long numRecords);
 int ProcessRecord (char record[]);
 
 
@@ -44,30 +44,20 @@ int main (int argc, char * argv[])
 	}
 	
 	long filesize = GetFileSize(file);
-	long numRecords = EIGHT_KB * (filesize / EIGHT_KB);
-	long numThreads = 0;
+	long numRecords = filesize / EIGHT_KB;
 	cout << "file size   " << filesize << endl;
-	cout << "num Records " << numRecords << endl;
-	for (int i = 0; i < numRecords; i++)
-	{
-		char * buffer = new char[EIGHT_KB];
-		long address = i * EIGHT_KB;
+	cout << "num records " << numRecords << endl;
 
-		ReadRecord(file, address, buffer);
-		cout << i << "/" << numRecords << endl;	
-		int tid = ProcessRecord(buffer);
-		if (tid > numThreads)
-			numThreads = tid;
-	}
+	long numThreads = ReadRecords(file, numRecords);
 	
-	cout << "num records " << numThreads << endl;
+	cout << "num threads " << numThreads << endl;
 	for (int i = 0; i < numThreads + 1; i++)
 	{
 		RecordStat stat = theadStats[i];
 		cout << "Thread\t" << i << "\t";
 		cout << "NUM Recs\t" << stat.rCount << "\t";
 		cout << "Last RID\t" << stat.lastRecordID << "\t";
-		cout << "Corrupted\t" << stat.lastRecordValid << endl;
+		cout << "Safe\t" << stat.lastRecordValid << endl;
 	}
 }
 
@@ -89,18 +79,22 @@ long GetFileSize(const char filename[])
 	return (long)length;
 }
 
-void ReadRecord(const char filename[], int address, char buffer[])
+int ReadRecords(char filename[], long numRecords)
 {
 	ifstream inf(filename, ios::in | ios::binary);
-	if (!inf)
+	char * buffer = new char[EIGHT_KB];
+	long numThreads = 0;
+	for (int i = 0; i < numRecords; i++)
 	{
-		cerr << "Could not open " << filename << endl;
-		return;
+		long address = i * EIGHT_KB;
+		inf.seekg(address, ios::beg);
+		inf.read(buffer, EIGHT_KB);
+		int tid = ProcessRecord(buffer);
+		if (tid > numThreads)
+			numThreads = tid;
 	}
-
-	inf.seekg(address, ios::beg);
-	inf.read(buffer, EIGHT_KB);
 	inf.close();
+	return numThreads;
 }
 
 int ProcessRecord (char record[])
@@ -114,7 +108,7 @@ int ProcessRecord (char record[])
 	memcpy(&address, 	record + 1 * sizeof(long), sizeof(long));
 	memcpy(&rid, 		record + 2 * sizeof(long), sizeof(long));
 	memcpy(&oldchecksum, 	record + 3 * sizeof(long), sizeof(long));
-	
+	cout << tid << " " << address << " " << rid << " " << oldchecksum << "    ";
 	if(tid == 0) return 0;
 
 	long newchecksum = 0;
