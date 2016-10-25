@@ -70,7 +70,7 @@ int main (int argc, char * argv[])
 	
 	srand(time(NULL));
 	
-	for (long i = 0; i < num_workers; i++)
+	for (long i = 1; i <= num_workers; i++)
 	{
 		int returnCode = pthread_create(workers + i, NULL, DoWork, (void *) i);
 		if (returnCode)
@@ -111,8 +111,8 @@ void * DoWork (void * threadid)
 
 bool IsFileValid (const char fileName[])
 {
-	std::ifstream infile(fileName);
-    return infile.good();
+	ifstream infile(fileName);
+	return infile.good();
 }
 
 long GetFileSize(const char filename[])
@@ -153,7 +153,7 @@ char * CreateRecord (long tid, long address)
 	memcpy(record + 1 * sizeof(long), &address, sizeof(long));
 	memcpy(record + 2 * sizeof(long), &rid, sizeof(long));
 	
-	long checksum;
+	long checksum = 0;
 	for (int i = 4 * sizeof(long); i < EIGHT_KB; i += sizeof(int))
 	{
 		int randomNumber = rand();
