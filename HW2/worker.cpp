@@ -6,6 +6,7 @@
 #include <iostream>
 #include <limits>
 #include <pthread.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -18,11 +19,11 @@ pthread_mutex_t record_id_mutex;
 char * file;
 long filesize;
 int num_workers;
+int fd;
 long record_id = 0;
 
 void * DoWork (void * arg);
-bool IsFileValid (const char fileName[]);
-long GetFileSize(const char filename[]);
+long GetFileSize(int fp);
 void WriteRecord(const char filename[], int address, char buffer[]);
 char * CreateRecord (long tid, long address);
 long GetNextID ();
@@ -31,18 +32,13 @@ int main (int argc, char * argv[])
 {
 	if (argc != 3)
 	{
-		cerr << "Invalid Number of Arguments" << endl;
+		cerr << "Worker: Invalid Number of Arguments" << endl;
 		return 0;
 	}
 	
 	file = argv[1];
 	num_workers = atoi(argv[2]);
 	
-	if (!IsFileValid(file))
-	{
-		cerr << "Invalid File" << endl;
-		return 0;
-	}
 	
 	if (num_workers < 2 || num_workers > 100)
 	{
@@ -50,10 +46,17 @@ int main (int argc, char * argv[])
 		return 0;
 	}
 	
-	cout << "Trying to use file: " << file << endl;
-	filesize = GetFileSize(file);
+	cout << "Opening file: " << file << endl;
+	fd = open(file, O_RDWR, 0);
+	if (fd < 0)
+	{
+		cerr << "Could not open: " << file << endl;
+		return 1;
+	}
+	filesize = GetFileSize(fd);
 	cout << "File is of size: " << filesize << endl;
 	cout << "Number of workers: " << num_workers << endl;
+	
 	
 	workers = new pthread_t[num_workers];
 	if (pthread_mutex_init(&worker_mutex, NULL) != 0)
@@ -70,9 +73,9 @@ int main (int argc, char * argv[])
 	
 	srand(time(NULL));
 	
-	for (long i = 1; i <= num_workers; i++)
+	for (long i = 0; i < num_workers; i++)
 	{
-		int returnCode = pthread_create(workers + (i-1), NULL, DoWork, (void *) i);
+		int returnCode = pthread_create(workers + (i-1), NULL, DoWork, (void *) (i + 1));
 		if (returnCode)
 		{
 			cerr << "Error: unable to create thread, return code: " << returnCode << endl;
@@ -91,59 +94,58 @@ int main (int argc, char * argv[])
 		}
 	}
 	
+	close(fd);
 	pthread_mutex_destroy(&record_id_mutex);
 }
 
 void * DoWork (void * threadid)
 {
 	long id = (long) threadid;
+	int num_records = filesize / EIGHT_KB;
 	while (true)
 	{
-		int rn = rand() % filesize;
-		long address = EIGHT_KB * (rn / EIGHT_KB);
+		int rn = rand() % (num_records + 1);
+		long address = rn * EIGHT_KB;
 		char * record = CreateRecord(id, address);
+		
 		pthread_mutex_lock(&worker_mutex);
 		WriteRecord(file, address, record);
-		cout << "Thread ID:\t" << id  << "\tAddress:\t" << address << "  \tID:\t" << id << endl;
+		
+#ifdef DEBUG
+		cout << "Thread ID:  " << id  << "\tAddress:  " << address << "  \tID:  " << id << endl;
+#endif
 		pthread_mutex_unlock(&worker_mutex);
 	}
 	return NULL;
 }
 
-bool IsFileValid (const char fileName[])
+long GetFileSize(int fp)
 {
-	ifstream infile(fileName);
-	return infile.good();
-}
-
-long GetFileSize(const char filename[])
-{
-	ifstream file;
-	file.open(filename, ios::in | ios::binary);
-	file.ignore(numeric_limits<streamsize>::max());
-	streamsize length = file.gcount();
-	file.clear();
-	file.seekg(0, ios_base::beg);
-	file.close();
-	return (long)length;
+	long size = (long) lseek(fp, 0L, SEEK_END);
+	return size;
 }
 
 void WriteRecord(const char filename[], int address, char buffer[])
 {
-	int fd = open(filename, O_WRONLY);
-	if (fd != -1)
-	{
-		cerr << "Could not open " << filename << endl;
-		return;
-	}
+#ifdef DEBUG
+	long data = 0;
+	memcpy(&data, buffer + 0 * sizeof(long), sizeof(long));
+	cout << "tid: " << data << "\t";
+	memcpy(&data, buffer + 1 * sizeof(long), sizeof(long));
+	cout << "add: " << data << "\t";
+	memcpy(&data, buffer + 2 * sizeof(long), sizeof(long));
+	cout << "rid: " << data << "\t";
+	memcpy(&data, buffer + 3 * sizeof(long), sizeof(long));
+	cout << "chk: " << data << endl;
+#endif
 	
-	for (int i = 0; i < 8; i++)
+	int partitions = 64;
+	for (int i = 0; i < partitions; i++)
 	{
-		int size = EIGHT_KB / 8;
-		int offset = i * size;
-		pwrite(fd, buffer + offset, size, offset);
+		int size = EIGHT_KB / partitions;
+		int offset = address + i * size;
+		pwrite(fd, buffer + i * size, size, offset);
 	}
-	close(fd);
 }
 
 char * CreateRecord (long tid, long address)
@@ -161,7 +163,6 @@ char * CreateRecord (long tid, long address)
 		checksum += randomNumber;
 		memcpy(record + i, &randomNumber, sizeof(int));
 	}
-	
 	memcpy(record + 3 * sizeof(long), &checksum, sizeof(long));
 
 	return record;

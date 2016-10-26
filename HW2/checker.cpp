@@ -12,9 +12,8 @@
 
 using namespace std;
 
-bool IsFileValid (const char fileName[]);
-long GetFileSize(const char filename[]);
-int ReadRecords(char filename[], long numRecords);
+long GetFileSize(int fp);
+int ReadRecords(int fp, long numRecords);
 int ProcessRecord (char record[]);
 
 
@@ -31,69 +30,56 @@ int main (int argc, char * argv[])
 {
 	if (argc != 2)
 	{
-		cerr << "Invalid Number of Arguments" << endl;
+		cerr << "Checker: Invalid Number of Arguments" << endl;
 		return 0;
 	}
 
 	char * file = argv[1];
 
-	if (!IsFileValid(file))
+	cout << "Opening file: " << file << endl;
+	int fd = open(file, O_RDWR, 0);
+	if (fd < 0)
 	{
-		cerr << "Invalid File" << endl;
-		return 0;
+		cerr << "Could not open: " << file << endl;
+		return 1;
 	}
-	
-	long filesize = GetFileSize(file);
+	long filesize = GetFileSize(fd);
 	long numRecords = filesize / EIGHT_KB;
-	cout << "file size   " << filesize << endl;
+	cout << "File is of size: " << filesize << endl;
 	cout << "num records " << numRecords << endl;
 
-	long numThreads = ReadRecords(file, numRecords);
+	long numThreads = ReadRecords(fd, numRecords);
 	
 	cout << "num threads " << numThreads << endl;
-	for (int i = 0; i < numThreads + 1; i++)
+	for (int i = 0; i < numThreads; i++)
 	{
 		RecordStat stat = theadStats[i];
-		cout << "Thread\t" << i << "\t";
+		cout << "Thread\t" << i + 1 << "\t";
 		cout << "NUM Recs\t" << stat.rCount << "\t";
 		cout << "Last RID\t" << stat.lastRecordID << "\t";
 		cout << "Safe\t" << stat.lastRecordValid << endl;
 	}
+	close(fd);
 }
 
-bool IsFileValid (const char fileName[])
+
+long GetFileSize(int fd)
 {
-	ifstream infile(fileName);
-	return infile.good();
+	long size = (long) lseek(fd, 0L, SEEK_END);
+	return size;
 }
 
-long GetFileSize(const char filename[])
+int ReadRecords(int fd, long numRecords)
 {
-	ifstream file;
-	file.open(filename, ios::in | ios::binary);
-	file.ignore(numeric_limits<streamsize>::max());
-	streamsize length = file.gcount();
-	file.clear();
-	file.seekg(0, ios_base::beg);
-	file.close();
-	return (long)length;
-}
-
-int ReadRecords(char filename[], long numRecords)
-{
-	ifstream inf(filename, ios::in | ios::binary);
 	char * buffer = new char[EIGHT_KB];
 	long numThreads = 0;
 	for (int i = 0; i < numRecords; i++)
 	{
-		long address = i * EIGHT_KB;
-		inf.seekg(address, ios::beg);
-		inf.read(buffer, EIGHT_KB);
+		pread(fd, buffer, EIGHT_KB, i * EIGHT_KB);
 		int tid = ProcessRecord(buffer);
 		if (tid > numThreads)
 			numThreads = tid;
 	}
-	inf.close();
 	return numThreads;
 }
 
@@ -107,9 +93,14 @@ int ProcessRecord (char record[])
 	memcpy(&tid, 		record + 0 * sizeof(long), sizeof(long));
 	memcpy(&address, 	record + 1 * sizeof(long), sizeof(long));
 	memcpy(&rid, 		record + 2 * sizeof(long), sizeof(long));
-	memcpy(&oldchecksum, 	record + 3 * sizeof(long), sizeof(long));
-	cout << tid << " " << address << " " << rid << " " << oldchecksum << "    ";
-	if(tid == 0) return 0;
+	memcpy(&oldchecksum,record + 3 * sizeof(long), sizeof(long));
+
+	cout << "thread id: " << tid << "\t";
+	cout << "address:   " << address << "\t";
+	cout << "record id: " << rid << "\t";
+	cout << "checksum:  " << oldchecksum << endl;
+
+	if(tid == 0 || tid > 100) return 0;
 
 	long newchecksum = 0;
 	for (int i = 4 * sizeof(long); i < EIGHT_KB; i += sizeof(int))
@@ -119,11 +110,11 @@ int ProcessRecord (char record[])
 		newchecksum += value;
 	}
 
-	theadStats[tid].rCount++;
-	if (theadStats[tid].lastRecordID < rid)
+	theadStats[tid-1].rCount++;
+	if (theadStats[tid-1].lastRecordID < rid)
 	{
-		theadStats[tid].lastRecordID = rid;
-		theadStats[tid].lastRecordValid = (newchecksum == oldchecksum);
+		theadStats[tid-1].lastRecordID = rid;
+		theadStats[tid-1].lastRecordValid = (newchecksum == oldchecksum);
 	}
 	return tid;
 }

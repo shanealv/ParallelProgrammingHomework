@@ -5,4 +5,4 @@ if [ $# == 0 ]; then
 	exit 
 fi
 
-timeout $1 ./worker.out device-file 50
+timeout $1 ./worker.out device-file 100
