@@ -38,18 +38,20 @@ int main(int argc, char * argv[])
 	int done = 0;
 	omp_set_dynamic( 0 );
 	omp_set_num_threads(4);
-	int num_threads;
-	
+	int num_threads = 0;
 	for (iter = 0; iter < maxiter; iter++)
 	{
-		maxdiff = 0;
 	#pragma omp parallel private(i,j,thisdiff)
-	{
+	{	
+		int id = omp_get_thread_num();
 		#pragma omp single
-		num_threads = omp_get_num_threads();
+		maxdiff = 0;
+		if (num_threads == 0)
+		{	
+			num_threads = omp_get_num_threads();
+		}
 		#pragma omp barrier
 		
-		int id = omp_get_thread_num();
 		int start = (N / num_threads) * id + 1; 
 		int end = (N / num_threads) * (id + 1) + 1;
 		if (id == num_threads - 1) end = N + 1;
