@@ -1,0 +1,16 @@
+Shane Alvarez
+CS 474 Operating Systems
+Project 2
+
+Build Instructions:
+* A make file is included, so simpled calling make in the terminal will build the code.
+
+Running Instructions:
+* The make file outputs to shell++.out, which can be run with the following command:
+	./shell++.out
+
+Notes:
+* certain commands (such as top) have been found to interfere with echoing keypresses back to the user.  I've found executing reset to be the best solution to this, as the issue results from the extra program.
+* commands longer than 80 characters overflow into the next command.  This is accomplished by reading a maximum of 81 characters (including end of line) into a buffer at a time.  The unfortunate result is that commands that are longer will overflow into a new command.  This is safe from a code injection standpoint, but not ideal.
+* A child process being waiting on can be killed with Ctrl+C, but not be suspended.  Instread, suspending affects both the child process and parent.
+* the directory cannot be changed from within the shell.

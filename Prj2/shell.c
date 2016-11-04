@@ -17,6 +17,22 @@
 #define MAX_LINE		80 /* 80 chars per line, per command */
 #define H_COUNT			10 /* 10 lines of history */
 
+typedef struct HistoryNode
+{
+	struct HistoryNode * next;
+	char * command;
+} HistoryNode;
+typedef struct History
+{
+	HistoryNode * head;
+	int size;
+} History;
+
+History history = 
+{ 
+	.head = NULL,
+	.size = 0 
+};
 
 int GetCommand (char buffer[], char* argv[]);
 void Execute (int argc, char * argv[]);
@@ -26,19 +42,14 @@ void PrintHistory();
 char* GetFromHistory(int n);
 void sigHandler(int signum);
 
-char* history[H_COUNT];
-int historyIdx = 0;
 bool ExitWait = false;
 
 int main(void)
 {
 	int argc = 0;
-	char* argv[MAX_LINE/2 + 1];	/* command line (of 80) has max of 40 arguments */
-	char buffer[MAX_LINE];
-    	int should_run = 1;
-
-	for (int i = 0; i < H_COUNT; i++)
-		history[i] = NULL;
+	char* argv[MAX_LINE/2 + 1];	// command line (of 80) has max of 40 arguments
+	char buffer[MAX_LINE + 1]; // stores individual commands
+	int should_run = 1;
 	
 	for (int i = 0; i < MAX_LINE/2 + 1; i++)
 		argv[i] = NULL;
@@ -53,7 +64,7 @@ int main(void)
 		if (strcmp(*argv, "exit") == 0)
 			return 0;
 		
-		if (strcmp(*argv, "!!") == 0)
+		if (strcmp(*argv, "history") == 0)
 		{
 			PrintHistory();
 			continue;
@@ -62,19 +73,20 @@ int main(void)
 		AddToHistory(buffer);
 		
 		Execute(argc, argv);
-	} while (should_run);
+	} while (true);
     
 	return 0;
 }
 
 int GetCommand (char buffer[], char* argv[])
 {
-	char command[MAX_LINE];
+	char command[MAX_LINE + 1];
 	const char space[2] = " ";
 	char * argNew;
 	int argc = 0;
 
-	fgets(command, MAX_LINE, stdin);
+	fgets(command, MAX_LINE + 1, stdin);
+	command[MAX_LINE] = 0;
 
 	int lastIdx = strlen(command) - 1;
 	
@@ -84,15 +96,25 @@ int GetCommand (char buffer[], char* argv[])
 		command[lastIdx] = 0; // remove newline
 
 	// if a history indexer was used, replace command with it
-	if (lastIdx >= 2 && command[0] == '!' && command[1] != '!')
-	{
-		argNew = strtok(command, space);
-		int histIdx = atoi(argNew + 1);
-		char * histCommand = GetFromHistory(histIdx);
-		if (histCommand == NULL)
-			return -1;
-		strcpy(command, histCommand);
-	}
+	if (lastIdx >= 2 && command[0] == '!')
+		if (command[1] == '!')
+		{
+			char * histCommand = GetFromHistory(history.size);
+			if (histCommand == NULL)
+				return -1;
+			strcpy(command, histCommand);
+			printf("%s\n", command);
+		}
+		else
+		{
+			argNew = strtok(command, space);
+			int histIdx = atoi(argNew + 1);
+			char * histCommand = GetFromHistory(histIdx);
+			if (histCommand == NULL)
+				return -1;
+			strcpy(command, histCommand);
+			printf("%s\n", command);
+		}
 
 	strcpy(buffer, command); // save the original command
 
@@ -124,13 +146,13 @@ void Execute (int argc, char * argv[])
 	// execute in new process
 	if ((pid = fork()) < 0)
 	{
-		perror("Failed to create child process\n");
+		perror("Failed to create child process");
 	}
 	else if (pid == 0)
 	{		
 		if (execvp(*argv, argv) < 0)
 		{
-			perror("Error: execution failed\n");
+			perror("Execution failed");
 		}
 		exit(1);
 	}
@@ -144,6 +166,8 @@ void Execute (int argc, char * argv[])
 		{
 			kill(pid, SIGKILL); // kill the child process
 			ExitWait = false;
+			fflush(stdout);
+			printf("\n");
 		}
 		// resotre signal handler
 		signal(SIGINT, SIG_DFL);
@@ -159,43 +183,40 @@ void Execute (int argc, char * argv[])
 
 void AddToHistory(char* buffer)
 {
-	free(history[historyIdx]);
-	history[historyIdx] = (char *) malloc(sizeof(char) * strlen(buffer) + 1);
-	strcpy(history[historyIdx], buffer);
-	historyIdx = (historyIdx + 1) % H_COUNT;
-}
-
-int HistoryLength()
-{
-	int total = 0;
-	for (int i = 0; i < H_COUNT; i++)
-	{
-		if (history[i] != NULL)
-			total++;
-	}
-	return total;
+	HistoryNode * newNode = (HistoryNode *) malloc(sizeof(HistoryNode));
+	newNode->command = (char *) malloc(sizeof(char) * strlen(buffer) + 1);
+	strcpy(newNode->command, buffer);
+	newNode->next = history.head;
+	history.head = newNode;
+	history.size++;
 }
 
 void PrintHistory()
 {
-	int id = HistoryLength();
-	for (int i = historyIdx; i < historyIdx + H_COUNT; i++)
+	int index = history.size;
+	int i = 0;
+	for (HistoryNode * curser = history.head; curser != NULL; curser = curser->next)
 	{
-		if (history[i % H_COUNT] == NULL) continue;
-		printf("%2i %s\n", id--, history[i % H_COUNT]);
+		printf("%2i %s\n", index--, curser->command);
+		if (++i >= 10)
+			return;
 	}
 }
 
 char* GetFromHistory(int n)
 {
-	if (n <= 0 || n > HistoryLength())
+	if (n <= 0 || n > history.size)
 	{
 		printf("No such command in history.\n");
 		return NULL;
 	}
-	char * command = history[(historyIdx - n) % H_COUNT];
-	printf("%s\n", command);
-	return command;
+	int index = history.size;
+	for (HistoryNode * curser = history.head; curser != NULL; curser = curser->next)
+	{
+		if (index-- == n)
+			return curser->command;
+	}
+	return NULL;
 }
 
 void sigHandler(int signum)
