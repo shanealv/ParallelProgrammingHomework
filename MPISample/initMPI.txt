@@ -1,0 +1,10 @@
+#!/bin/bash
+
+foreach h (borg cauchy fermat godel granville lamarr mckusick naur perlman)
+ssh $h uptime
+end
+
+source /var/mpi-selector/data/openmpi-1.7.2.csh
+env | grep openmpi
+
+cauchy, fermat, mchusick, naur
