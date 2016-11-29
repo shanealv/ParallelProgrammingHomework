@@ -31,3 +31,9 @@
 # Debug files
 *.dSYM/
 *.su
+*.ipch
+*.opendb
+*.db
+*.json
+*.sqlite
+*.suo
