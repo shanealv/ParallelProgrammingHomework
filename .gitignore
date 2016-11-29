@@ -37,3 +37,4 @@
 *.json
 *.sqlite
 *.suo
+*.sqlite-journal

@@ -3,14 +3,41 @@
 #include <string.h>
 #include <time.h>
 
+#define TILE 2;
+
 __global__ void gpu_mult_kernel(int* A, int* B, int* C, const int n)
 {
-	int row = blockIdx.y * blockDim.y + threadIdx.y;
-	int col = blockIdx.x * blockDim.x + threadIdx.x;
+	int i = blockIdx.y * blockDim.y + threadIdx.y;
+	int j = blockIdx.x * blockDim.x + threadIdx.x;
 
 	for (int k = 0; k < n; k++)
+		C[i * n + j] += A[i * n + k] * B[k * n + j];
+}
+
+__global__ void sgpu_mult_kernel(int* A, int* B, int* C, const int n)
+{
+	__shared__ int sharedA[TILE][TILE];
+	__shared__ int sharedB[TILE][TILE];
+
+	int i = blockIdx.y * TILE + threadIdx.y;
+	int j = blockIdx.x * TILE + threadIdx.x;
+
+	// for each tiled section
+	for (int m = 0; m < n / TILE; m++)
 	{
-		C[row * n + col] += A[row * n + k] * B[k * n + col];
+		// copy data to for this section (each thread works to acheive this goal)
+		sharedA[threadIdx.y][threadIdx.x] = A[i * n + (m * TILE + threadIdx.x)];
+		sharedB[threadIdx.y][threadIdx.x] = B[(m * TILE + threadIdx.y) * n + j];
+
+		// synchronize
+		__syncthreads();
+
+		// calculate the values for the tile section
+		for (int k = 0; k < TILE_WIDTH; k++)
+			C[i * n + j] += sharedA[threadIdx.x][k] * sharedB[k][threadIdx.y];
+
+		// synchronize
+		__syncthreads();
 	}
 }
 
@@ -63,17 +90,21 @@ int main(int argc, char * argv[])
 	cudaMemcpy(X_d, X, m, cudaMemcpyHostToDevice);
 	cudaMemcpy(Y_d, Y, m, cudaMemcpyHostToDevice);
 	cudaMemcpy(Zgpu_d, Zgpu, m, cudaMemcpyHostToDevice);
+	cudaMemcpy(Zsgpu_d, Zsgpu, m, cudaMemcpyHostToDevice);
 
 	// kernel parameters
-	dim3 dimGrid(n / 2, n / 2, 1);
-	dim3 dimBlock(2, 2, 1);
+	dim3 dimGrid(n / TILE, n / TILE, 1);
+	dim3 dimBlock(TILE, TILE, 1);
 
-	// run kernel
+	// run kernels
 	gpu_mult_kernel << <dimGrid, dimBlock >> > (X_d, Y_d, Zgpu_d, n);
+	sgpu_mult_kernel << <dimGrid, dimBlock >> > (X_d, Y_d, Zgpu_d, n);
 
 	// copy result back
 	cudaMemcpy(Zgpu, Zgpu_d, m, cudaMemcpyDeviceToHost);
+	cudaMemcpy(Zsgpu, Zsgpu_d, m, cudaMemcpyDeviceToHost);
 	print_matrix(n, Zgpu);
+	print_matrix(n, Zsgpu);
 }
 
 void cpu_mult(int n, int* A, int* B, int* C)
