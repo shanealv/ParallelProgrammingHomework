@@ -62,7 +62,7 @@ int main(int argc, char * argv[])
 	// copy host data to gpu
 	cudaMemcpy(X_d, X, m, cudaMemcpyHostToDevice);
 	cudaMemcpy(Y_d, Y, m, cudaMemcpyHostToDevice);
-	cudaMemcpy(Zgpu_d, Zcpu, m, cudaMemcpyHostToDevice);
+	cudaMemcpy(Zgpu_d, Zgpu, m, cudaMemcpyHostToDevice);
 
 	// kernel parameters
 	dim3 dimGrid(n / 2, n / 2, 1);
