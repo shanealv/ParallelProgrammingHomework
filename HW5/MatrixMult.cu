@@ -3,7 +3,7 @@
 #include <string.h>
 #include <time.h>
 
-#define TILE 2;
+const int TILE = 2;
 
 __global__ void gpu_mult_kernel(int* A, int* B, int* C, const int n)
 {
@@ -14,15 +14,15 @@ __global__ void gpu_mult_kernel(int* A, int* B, int* C, const int n)
 	{
 		C[i * n + j] += A[i * n + k] * B[k * n + j];
 	}
-}
+};
 
 __global__ void sgpu_mult_kernel(int* A, int* B, int* C, const int n)
 {
 	__shared__ int sharedA[TILE][TILE];
 	__shared__ int sharedB[TILE][TILE];
 
-	int i = blockIdx.y * TILE + threadIdx.y;
-	int j = blockIdx.x * TILE + threadIdx.x;
+	int i = (blockIdx.y * TILE) + threadIdx.y;
+	int j = (blockIdx.x * TILE) + threadIdx.x;
 
 	// for each tiled section
 	for (int t = 0; t < n / TILE; t++)
@@ -43,7 +43,7 @@ __global__ void sgpu_mult_kernel(int* A, int* B, int* C, const int n)
 		// synchronize
 		__syncthreads();
 	}
-}
+};
 
 void cpu_mult(int n, int* A, int* B, int* C);
 int* allocate_matrix(int n);
@@ -102,8 +102,8 @@ int main(int argc, char * argv[])
 	dim3 dimBlock(TILE, TILE, 1);
 
 	// run kernels
-	gpu_mult_kernel <<<dimGrid, dimBlock >>> (X_d, Y_d, Zgpu_d, n);
-	sgpu_mult_kernel <<<dimGrid, dimBlock >>> (X_d, Y_d, Zsgpu_d, n);
+	gpu_mult_kernel <<<dimGrid, dimBlock>>> (X_d, Y_d, Zgpu_d, n);
+	sgpu_mult_kernel <<<dimGrid, dimBlock>>> (X_d, Y_d, Zsgpu_d, n);
 
 	// copy result back
 	cudaMemcpy(Zgpu, Zgpu_d, m, cudaMemcpyDeviceToHost);
