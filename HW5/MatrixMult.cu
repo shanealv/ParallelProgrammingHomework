@@ -71,7 +71,7 @@ int main(int argc, char * argv[])
 	gpu_mult_kernel << <dimGrid, dimBlock >> > (X_d, Y_d, Zgpu_d, n);
 
 	// copy result back
-	cudaMemcpy(Zgpu_d, Zgpu, m, cudaMemcpyDeviceToHost);
+	cudaMemcpy(Zgpu, Zgpu_d, m, cudaMemcpyDeviceToHost);
 	print_matrix(n, Zgpu);
 }
 
