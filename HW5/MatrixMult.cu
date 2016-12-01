@@ -77,11 +77,18 @@ int main(int argc, char * argv[])
 	}
 	
 	int b = 1;
-	while (b < n && b < MAXTILE)
+	if (n <= MAXTILE)
 	{
-		b = b << 1;
+		b = n;
 	}
-	
+	else
+	{
+		b = MAXTILE;
+		while (b > 1 && n % b != 0) // while b is not a factor of n
+		{
+			b--;
+		}
+	}
 	int *X, *Y, *Zcpu, *Zgpu, *Zsgpu;
 	int *X_d, *Y_d, *Zgpu_d, *Zsgpu_d;
 	double start, end;
